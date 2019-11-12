@@ -1,0 +1,20 @@
+* vector-benchmark
+
+** Installation
+
+#+BEGIN_SRC bash
+  raco pkg install --clone racket-vector-benchmark \
+       https://github.com/dedbox/racket-vector-benchmark.git
+  cd ./racket-vector-benchmark
+#+END_SRC
+
+** Usage
+
+In Linux or Mac running ~./benchmark.sh~ will check all vector lengths and
+counts in the set {2, 4, 8, 16}.
+
+For an individual run:
+
+#+BEGIN_SRC bash
+  racket ./benchmark.rkt <num-columns/vector> <num-vectors>
+#+END_SRC
