@@ -1,13 +1,17 @@
 #!/bin/bash
 
-for N in 2 4 8 16
+echo -n "	" > results.csv
+grep "  ;;; " benchmark.rkt | cut -f4- -d\  | strings -s "	" >> results.csv
+echo >> results.csv
+
+for M in 2 4 8 16
 do
-    for K in 2 4 8 16
+    for N in 2 4 8 16
     do
-        echo "N=$N K=$N" | tee -a results.csv
+        echo -n "M=$M N=$N" | tee -a results.csv
         for i in {1..5}
         do
-            racket benchmark.rkt $N $K | tee -a results.csv
+            racket benchmark.rkt $M $N | tee -a results.csv
         done
     done
 done

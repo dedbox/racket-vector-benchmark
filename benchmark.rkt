@@ -25,7 +25,7 @@
       (if (>= Δt 1000)
           (exact-round (/ count (/ Δt 1000)))
           (loop (+ count 1) (for/fold ([v1 v]) ([v2 vs]) (op arg ... v1 v2)))))
-    (printf "~a " (loop 0 (random-vector)))
+    (printf "\t~a" (loop 0 (random-vector)))
     (flush-output)))
 
 (module benchmark-typed-array typed/racket/base
@@ -54,7 +54,7 @@
         (if (>= Δt 1000)
             (exact-round (/ count (/ Δt 1000)))
             (loop (+ count 1) (for/fold ([v1 v]) ([v2 vs]) (op arg ... v1 v2)))))
-      (printf "~a " (loop 0 (random-vector)))
+      (printf "\t~a" (loop 0 (random-vector)))
       (flush-output)))
 
   (: do-typed-array-benchmark (-> Positive-Integer Positive-Integer Void))
@@ -69,7 +69,7 @@
            math/flonum)
   (provide (all-defined-out))
 
-  (define-syntax-rule (typed-flonum-benchmark M N for/vector-type op arg ...)
+  (define-syntax-rule (typed-flonum-benchmark M N)
     (let ()
       (: random-vector (-> FlVector))
       (define (random-vector)
@@ -85,13 +85,13 @@
         (define Δt (- (current-inexact-milliseconds) t0))
         (if (>= Δt 1000)
             (exact-round (/ count (/ Δt 1000)))
-            (loop (+ count 1) (for/fold ([v1 v]) ([v2 vs]) (op arg ... v1 v2)))))
-      (printf "~a " (loop 0 (random-vector)))
+            (loop (+ count 1) (for/fold ([v1 v]) ([v2 vs]) (flvector* v1 v2)))))
+      (printf "\t~a" (loop 0 (random-vector)))
       (flush-output)))
 
   (: do-typed-flonum-benchmark (-> Positive-Integer Positive-Integer Void))
   (define (do-typed-flonum-benchmark M N)
-    (typed-flonum-benchmark M N for/array flvector*)))
+    (typed-flonum-benchmark M N)))
 
 (require 'benchmark-typed-math-flonum)
 
@@ -109,6 +109,8 @@
   (for/flvector ([x1 (in-flvector v1)]
                  [x2 (in-flvector v2)])
     (unsafe-fl* x1 x2)))
+
+(require glm/private/new-vector)
 
 (module+ main
   (require racket/cmdline)
@@ -159,5 +161,8 @@
 
   ;;; math/flonum fully typed
   (do-typed-flonum-benchmark M N)
+
+  ;;; new-vector
+  (benchmark M N for/dvec dvec*dvec)
 
   (newline))
