@@ -95,6 +95,16 @@
 
 (require 'benchmark-typed-math-flonum)
 
+(module unsafe-typed-flvector typed/racket/base
+  (require math/flonum typed/racket/unsafe)
+  (unsafe-provide (rename-out [flvector* unsafe-typed-flvector*])))
+(require 'unsafe-typed-flvector)
+
+(module typed-flvector typed/racket/base
+  (require math/flonum)
+  (provide (rename-out [flvector* typed-flvector*])))
+(require 'typed-flvector)
+
 (define (flvector-* v1 v2)
   (for/flvector ([x1 (in-flvector v1)]
                  [x2 (in-flvector v2)])
@@ -164,5 +174,11 @@
 
   ;;; new-vector
   (benchmark M N for/dvec dvec*dvec)
+
+  ;;; typed/racket/unsafe + math-flonum
+  (benchmark M N for/flvector typed-flvector*)
+
+  ;;; typed/racket/unsafe + math-flonum
+  (benchmark M N for/flvector unsafe-typed-flvector*)
 
   (newline))
