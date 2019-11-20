@@ -1,184 +1,248 @@
 #lang racket/base
 
-(require glm/vec
-         math/array
+(require ffi/cvector
+         (only-in ffi/unsafe
+                  _array _double ptr-ref malloc array-length array-ref array-set!)
+         ffi/vector
+         (except-in math/array array-ref array-set!)
          math/flonum
+         racket/format
+         racket/function
          racket/math
+         racket/string
          racket/unsafe/ops
          racket/vector
          syntax/parse/define
+         "./typed.rkt"
          (for-syntax racket/base))
+
+(define K 1)
+(define T 1000)
+
+(define Mmax 4)
+(define Nmax 16)
 
 (random-seed 1)
 
-(define-syntax-rule (benchmark M N for/vector-type op arg ...)
-  (let ()
-    (define (random-vector)
-      (for/vector-type ([_ (in-range M)]) (random)))
-    (define vs (build-list (- N 1) (λ _ (random-vector))))
-    (collect-garbage)
-    (collect-garbage)
-    (collect-garbage)
-    (define t0 (current-inexact-milliseconds))
-    (define (loop count v)
-      (define Δt (- (current-inexact-milliseconds) t0))
-      (if (>= Δt 1000)
-          (exact-round (/ count (/ Δt 1000)))
-          (loop (+ count 1) (for/fold ([v1 v]) ([v2 vs]) (op arg ... v1 v2)))))
-    (printf "\t~a" (loop 0 (random-vector)))
-    (flush-output)))
+;;; ----------------------------------------------------------------------------
 
-(module benchmark-typed-array typed/racket/base
-  (require math/array
-           racket/math)
-  (provide (all-defined-out))
+(define (benchmark M N make op)
+  (define (make-random)
+    (apply make (for/list ([_ (in-range M)]) (random))))
+  (define vs (build-list (- N 1) (λ _ (make-random))))
+  (collect-garbage)
+  (collect-garbage)
+  (collect-garbage)
+  (define t0 (current-inexact-milliseconds))
+  (let loop ([v (make-random)]
+             [count 0]
+             [Δt 0])
+    (if (< Δt T)
+        (loop (for/fold ([v1 v]) ([v2 (in-list vs)]) (op v1 v2))
+              (add1 count)
+              (- (current-inexact-milliseconds) t0))
+        (exact-round (/ count (/ Δt T))))))
 
-  (: typed-array* (-> (Array Flonum) (Array Flonum) (Array Flonum)))
-  (define (typed-array* v1 v2)
-    (array* v1 v2))
+(define-simple-macro (define-benchmark-cases [name make op] ...)
+  #:with (type ...) (for/list ([_ (in-list (attribute name))]
+                               [i (in-naturals)])
+                      #`#,(add1 i))
+  #:with print-benchmark-index (datum->syntax this-syntax 'print-benchmark-index)
+  #:with run-benchmarks (datum->syntax this-syntax 'run-benchmarks)
+  (begin
+    (define (print-benchmark-index)
+      (printf "type\tname\n")
+      (for ([t (in-list '(type ...))]
+            [n (in-list '(name ...))])
+        (printf "~a\t~a\n" t n))
+      (print-typed-benchmark-index (length '(type ...))))
+    (define (run-benchmarks)
+      (printf (string-join '("# components" "# vectors" "type" "count") "\t"))
+      (newline)
+      (for* ([M (in-range 2 (add1 Mmax))]
+             [N (in-range 2 (add1 Nmax))])
+        (begin
+          (printf (string-join (map ~a (list M N type (benchmark M N make op)))))
+          (newline))
+        ...)
+      (run-typed-benchmarks (length '(type ...))))))
 
-  (define-syntax-rule (typed-array-benchmark M N for/vector-type op arg ...)
-    (let ()
-      (: random-vector (-> (Array Flonum)))
-      (define (random-vector)
-        (for/array: ([_ (in-range M)]) : Flonum (random)))
-      (define vs : (Listof (Array Flonum))
-        (build-list (- N 1) (λ _ (random-vector))))
-      (collect-garbage)
-      (collect-garbage)
-      (collect-garbage)
-      (define t0 (current-inexact-milliseconds))
-      (: loop (-> Nonnegative-Integer (Array Flonum) Integer))
-      (define (loop count v)
-        (define Δt (- (current-inexact-milliseconds) t0))
-        (if (>= Δt 1000)
-            (exact-round (/ count (/ Δt 1000)))
-            (loop (+ count 1) (for/fold ([v1 v]) ([v2 vs]) (op arg ... v1 v2)))))
-      (printf "\t~a" (loop 0 (random-vector)))
-      (flush-output)))
+;;; ----------------------------------------------------------------------------
 
-  (: do-typed-array-benchmark (-> Positive-Integer Positive-Integer Void))
-  (define (do-typed-array-benchmark M N)
-    (typed-array-benchmark M N for/array array*)))
+(define (ffi-array . xs)
+  (define t (_array _double (length xs)))
+  (define v (ptr-ref (malloc t 'atomic) t 0))
+  (for ([i (in-range (length xs))]
+        [x (in-list xs)])
+    (array-set! v i x))
+  v)
 
-(require 'benchmark-typed-array)
+(define (ffi-cvector . xs)
+  (apply cvector _double xs))
 
-(module benchmark-typed-math-flonum typed/racket/base
-  (require math/array
-           racket/math
-           math/flonum)
-  (provide (all-defined-out))
+(define-benchmark-cases
 
-  (define-syntax-rule (typed-flonum-benchmark M N)
-    (let ()
-      (: random-vector (-> FlVector))
-      (define (random-vector)
-        (for/flvector: ([_ (in-range M)]) (random)))
-      (define vs : (Listof FlVector)
-        (build-list (- N 1) (λ _ (random-vector))))
-      (collect-garbage)
-      (collect-garbage)
-      (collect-garbage)
-      (define t0 (current-inexact-milliseconds))
-      (: loop (-> Nonnegative-Integer FlVector Integer))
-      (define (loop count v)
-        (define Δt (- (current-inexact-milliseconds) t0))
-        (if (>= Δt 1000)
-            (exact-round (/ count (/ Δt 1000)))
-            (loop (+ count 1) (for/fold ([v1 v]) ([v2 vs]) (flvector* v1 v2)))))
-      (printf "\t~a" (loop 0 (random-vector)))
-      (flush-output)))
+ ["racket/base list for/list *"
+  list (λ (v1 v2)
+         (for/list ([x1 (in-list v1)]
+                    [x2 (in-list v2)])
+           (* x1 x2)))]
 
-  (: do-typed-flonum-benchmark (-> Positive-Integer Positive-Integer Void))
-  (define (do-typed-flonum-benchmark M N)
-    (typed-flonum-benchmark M N)))
+ ["racket/base list for/list fl*"
+  list (λ (v1 v2)
+         (for/list ([x1 (in-list v1)]
+                    [x2 (in-list v2)])
+           (fl* x1 x2)))]
 
-(require 'benchmark-typed-math-flonum)
+ ["racket/base list for/list unsafe-fl*"
+  list (λ (v1 v2)
+         (for/list ([x1 (in-list v1)]
+                    [x2 (in-list v2)])
+           (unsafe-fl* x1 x2)))]
 
-(module unsafe-typed-flvector typed/racket/base
-  (require math/flonum typed/racket/unsafe)
-  (unsafe-provide (rename-out [flvector* unsafe-typed-flvector*])))
-(require 'unsafe-typed-flvector)
+ ["racket/vector vector for/vector *" vector (λ (v1 v2)
+                                               (for/vector ([x1 (in-vector v1)]
+                                                            [x2 (in-vector v2)])
+                                                 (* x1 x2)))]
 
-(module typed-flvector typed/racket/base
-  (require math/flonum)
-  (provide (rename-out [flvector* typed-flvector*])))
-(require 'typed-flvector)
+ ["racket/vector vector for/vector fl*"
+  vector (λ (v1 v2)
+           (for/vector ([x1 (in-vector v1)]
+                        [x2 (in-vector v2)])
+             (fl* x1 x2)))]
 
-(define (flvector-* v1 v2)
-  (for/flvector ([x1 (in-flvector v1)]
-                 [x2 (in-flvector v2)])
-    (* x1 x2)))
+ ["racket/vector vector for/vector unsafe-fl*"
+  vector (λ (v1 v2)
+           (for/vector ([x1 (in-vector v1)]
+                        [x2 (in-vector v2)])
+             (unsafe-fl* x1 x2)))]
 
-(define (flvector-fl* v1 v2)
-  (for/flvector ([x1 (in-flvector v1)]
-                 [x2 (in-flvector v2)])
-    (fl* x1 x2)))
+ ["racket/vector vector vector-map *" vector (curry vector-map *)]
 
-(define (flvector-unsafe-fl* v1 v2)
-  (for/flvector ([x1 (in-flvector v1)]
-                 [x2 (in-flvector v2)])
-    (unsafe-fl* x1 x2)))
+ ["racket/vector vector vector-map fl*" vector (curry vector-map fl*)]
 
-(require glm/private/new-vector)
+ ["racket/vector vector vector-map unsafe-fl*" vector (curry vector-map unsafe-fl*)]
 
-(module+ main
-  (require racket/cmdline)
+ ["math/array *" (compose list->array list) (λ (v1 v2)
+                                              (for/array ([x1 (in-array v1)]
+                                                          [x2 (in-array v2)])
+                                                (* x1 x2)))]
 
-  (define-values (M N) (values #f #f))
+ ["math/array fl*" (compose list->array list)
+                   (λ (v1 v2)
+                     (for/array ([x1 (in-array v1)]
+                                 [x2 (in-array v2)])
+                                (fl* x1 x2)))]
 
-  (command-line
-   #:program "benchmark"
-   #:args (num-components num-vectors)
-   (set! M (string->number num-components))
-   (set! N (string->number num-vectors)))
+ ["math/array unsafe-fl*" (compose list->array list)
+                   (λ (v1 v2)
+                     (for/array ([x1 (in-array v1)]
+                                 [x2 (in-array v2)])
+                                (unsafe-fl* x1 x2)))]
 
-  ;;; math/array untyped
-  (benchmark M N for/array array*)
+ ["math/array array*" (compose list->array list) (λ (a b) (array* a b))]
 
-  ;;; math/array typed->untyped
-  (benchmark M N for/array typed-array*)
+ ["ffi/unsafe array *"
+  ffi-array
+  (λ (v1 v2)
+    (apply ffi-array (for/list ([i (in-range (array-length v1))])
+                       (* (array-ref v1 i) (array-ref v2 i)))))]
 
-  ;;; math/array fully typed
-  (do-typed-array-benchmark M N)
+ ["ffi/unsafe array fl*"
+  ffi-array
+  (λ (v1 v2)
+    (apply ffi-array (for/list ([i (in-range (array-length v1))])
+                       (fl* (array-ref v1 i) (array-ref v2 i)))))]
 
-  ;;; ffi/unsafe array, dynamic dispatch
-  (benchmark M N for/vec vec*)
+ ["ffi/unsafe array unsafe-fl*"
+  ffi-array
+  (λ (v1 v2)
+    (apply ffi-array (for/list ([i (in-range (array-length v1))])
+                       (unsafe-fl* (array-ref v1 i) (array-ref v2 i)))))]
 
-  ;;; ffi/unsafe array, static dispatch
-  (benchmark M N for/vec vec*vec)
+ ["ffi/vector f64vector *"
+  f64vector (λ (v1 v2)
+              (list->f64vector
+               (for/list ([x1 (in-list (f64vector->list v1))]
+                          [x2 (in-list (f64vector->list v2))])
+                 (* x1 x2))))]
 
-  ;;; vector
-  (benchmark M N for/vector vector-map *)
+ ["ffi/vector f64vector fl*"
+  f64vector (λ (v1 v2)
+              (list->f64vector
+               (for/list ([x1 (in-list (f64vector->list v1))]
+                          [x2 (in-list (f64vector->list v2))])
+                 (fl* x1 x2))))]
 
-  ;;; vector + racket/flonum
-  (benchmark M N for/vector vector-map fl*)
+ ["ffi/vector f64vector unsafe-fl*"
+  f64vector (λ (v1 v2)
+              (list->f64vector
+               (for/list ([x1 (in-list (f64vector->list v1))]
+                          [x2 (in-list (f64vector->list v2))])
+                 (unsafe-fl* x1 x2))))]
 
-  ;;; vector + racket/unsafe/ops
-  (benchmark M N for/vector vector-map unsafe-fl*)
+ ["ffi/cvector _double *"
+  ffi-cvector
+  (λ (v1 v2)
+    (list->cvector
+     (for/list ([x1 (in-list (cvector->list v1))]
+                [x2 (in-list (cvector->list v2))])
+       (* x1 x2))
+     _double))]
 
-  ;;; flvector
-  (benchmark M N for/flvector flvector-*)
+ ["ffi/cvector _double fl*"
+  ffi-cvector
+  (λ (v1 v2)
+    (list->cvector
+     (for/list ([x1 (in-list (cvector->list v1))]
+                [x2 (in-list (cvector->list v2))])
+       (fl* x1 x2))
+     _double))]
 
-  ;;; flvector + racket/flonum
-  (benchmark M N for/flvector flvector-fl*)
+ ["ffi/cvector _double unsafe-fl*"
+  ffi-cvector
+  (λ (v1 v2)
+    (list->cvector
+     (for/list ([x1 (in-list (cvector->list v1))]
+                [x2 (in-list (cvector->list v2))])
+       (unsafe-fl* x1 x2))
+     _double))]
 
-  ;;; flvector + racket/unsafe/ops
-  (benchmark M N for/flvector flvector-unsafe-fl*)
+ ["math/flonum flvector for/flvector *"
+  flvector (λ (v1 v2)
+             (for/flvector ([x1 (in-flvector v1)]
+                            [x2 (in-flvector v2)])
+               (* x1 x2)))]
 
-  ;;; flvector + math/flonum
-  (benchmark M N for/flvector flvector*)
+ ["math/flonum flvector for/flvector fl*"
+  flvector (λ (v1 v2)
+             (for/flvector ([x1 (in-flvector v1)]
+                            [x2 (in-flvector v2)])
+               (fl* x1 x2)))]
 
-  ;;; math/flonum fully typed
-  (do-typed-flonum-benchmark M N)
+ ["math/flonum flvector for/flvector unsafe-fl*"
+  flvector (λ (v1 v2)
+             (for/flvector ([x1 (in-flvector v1)]
+                            [x2 (in-flvector v2)])
+               (unsafe-fl* x1 x2)))]
 
-  ;;; new-vector
-  (benchmark M N for/dvec dvec*dvec)
+ ["math/flonum flvector flvector-map *" flvector (curry flvector-map *)]
 
-  ;;; typed/racket/unsafe + math-flonum
-  (benchmark M N for/flvector typed-flvector*)
+ ["math/flonum flvector flvector-map fl*" flvector (curry flvector-map fl*)]
 
-  ;;; typed/racket/unsafe + math-flonum
-  (benchmark M N for/flvector unsafe-typed-flvector*)
+ ["math/flonum flvector flvector-map unsafe-fl*" flvector (curry flvector-map unsafe-fl*)]
 
-  (newline))
+ ["math/flonum flvector inline-flvector-map *"
+  flvector (λ (v1 v2) (inline-flvector-map * v1 v2))]
+
+ ["math/flonum flvector inline-flvector-map fl*"
+  flvector (λ (v1 v2) (inline-flvector-map fl* v1 v2))]
+
+ ["math/flonum flvector inline-flvector-map unsafe-fl*"
+  flvector (λ (v1 v2) (inline-flvector-map unsafe-fl* v1 v2))]
+
+ ["math/flonum flvector flvector*" flvector flvector*])
+
+(print-benchmark-index)
+(newline)
+(run-benchmarks)
