@@ -61,7 +61,7 @@
       (printf (string-join '("# components" "# vectors" "type" "count") "\t"))
       (newline)
       (flush-output)
-      (for* ([M (in-range 2 (add1 Mmax))]
+      (for* ([M (in-range 4 (add1 Mmax))]
              [N (in-range 2 (add1 Nmax))])
         (begin
           (benchmark M N make op)
@@ -104,11 +104,11 @@
   ;;                    [x2 (in-list v2)])
   ;;           (fl* x1 x2)))]
 
-  ["racket/base list for/list unsafe-fl*"
-   list (λ (v1 v2)
-          (for/list ([x1 (in-list v1)]
-                     [x2 (in-list v2)])
-            (unsafe-fl* x1 x2)))]
+  ;; ["racket/base list for/list unsafe-fl*"
+  ;;  list (λ (v1 v2)
+  ;;         (for/list ([x1 (in-list v1)]
+  ;;                    [x2 (in-list v2)])
+  ;;           (unsafe-fl* x1 x2)))]
 
   ;; ["racket/vector vector for/vector *" vector (λ (v1 v2)
   ;;                                               (for/vector ([x1 (in-vector v1)]
@@ -133,24 +133,24 @@
 
   ;; ["racket/vector vector vector-map unsafe-fl*" vector (curry vector-map unsafe-fl*)]
 
-  ;; ["math/array *" (compose list->array list) (λ (v1 v2)
-  ;;                                              (for/array ([x1 (in-array v1)]
-  ;;                                                          [x2 (in-array v2)])
-  ;;                                                (* x1 x2)))]
+  ["math/array *" (compose list->array list) (λ (v1 v2)
+                                               (for/array ([x1 (in-array v1)]
+                                                           [x2 (in-array v2)])
+                                                 (* x1 x2)))]
 
-  ;; ["math/array fl*" (compose list->array list)
-  ;;                   (λ (v1 v2)
-  ;;                     (for/array ([x1 (in-array v1)]
-  ;;                                 [x2 (in-array v2)])
-  ;;                                (fl* x1 x2)))]
+  ["math/array fl*" (compose list->array list)
+                    (λ (v1 v2)
+                      (for/array ([x1 (in-array v1)]
+                                  [x2 (in-array v2)])
+                                 (fl* x1 x2)))]
 
-  ;; ["math/array unsafe-fl*" (compose list->array list)
-  ;;                   (λ (v1 v2)
-  ;;                     (for/array ([x1 (in-array v1)]
-  ;;                                 [x2 (in-array v2)])
-  ;;                                (unsafe-fl* x1 x2)))]
+  ["math/array unsafe-fl*" (compose list->array list)
+                    (λ (v1 v2)
+                      (for/array ([x1 (in-array v1)]
+                                  [x2 (in-array v2)])
+                                 (unsafe-fl* x1 x2)))]
 
-  ;; ["math/array array*" (compose list->array list) (λ (a b) (array* a b))]
+  ["math/array array*" (compose list->array list) (λ (a b) (array* a b))]
 
   ;; ["ffi/unsafe array *"
   ;;  ffi-array
@@ -253,7 +253,9 @@
 
   ;; ["math/flonum flvector flvector*" flvector flvector*]
 
-  ["glm-shim unsafe-dvec*" dvec unsafe-dvec*])
+  ;; ["glm-shim unsafe-dvec*" dvec unsafe-dvec*]
+
+  )
 
 (print-benchmark-index)
 (newline)

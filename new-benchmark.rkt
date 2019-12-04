@@ -58,8 +58,8 @@
 
     ))
 
-;; (require 'typed)
-;; (do-typed-benchmarks)
+(require 'typed)
+(do-typed-benchmarks)
 
 (require glm/dvec
          (prefix-in uu- glm/unsafe))
@@ -93,5 +93,5 @@
            (optimized-dvec4 1.0000001 1.0000001 1.0000001 1.0000001) optimized-dvec4*)
 
 (void (system "./baseline"))
-;; (void (system "./optimized"))
+(void (system "./optimized"))
 (newline)

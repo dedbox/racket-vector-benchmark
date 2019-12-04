@@ -20,7 +20,7 @@
     (error "failed linking glm-opt"))
   (unless (system (format "/usr/bin/g++ -O0 -o baseline baseline.cc"))
     (error "failed compiling baseline C++"))
-  (unless (system (format "/usr/bin/g++ -O3 -o optimized baseline.cc"))
+  (unless (system (format "/usr/bin/g++ -Ofast -march=native -o optimized baseline.cc"))
     (error "failed compiling optimized C++"))
   )
 
